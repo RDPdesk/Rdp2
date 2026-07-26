@@ -63,20 +63,13 @@ jobs:
           $boreExe = Get-ChildItem "C:\bore" -Recurse -Filter "bore.exe" | Select-Object -First 1 -ExpandProperty FullName
           Copy-Item $boreExe "C:\bore.exe" -Force
 
-      # ── STEP 1: Show Session Info & Keep Alive ──────────────────────
-      - name: 1. Session Info & Keep Alive
+      # ── STEP 1: Show Session Info ──────────────────────
+      - name: 1. Show Session Info
         shell: pwsh
         env:
           RUN_NUMBER: ${{ github.run_number }}
         run: |
-          # 1. Custom function to instantly flush text to the GitHub Actions UI
-          function Write-Log {
-            param([string]$Message)
-            [Console]::WriteLine($Message)
-            [Console]::Out.Flush()
-          }
-
-          # 2. Setup AnyDesk Password and Fetch ID
+          # 1. Setup AnyDesk Password and Fetch ID
           echo "GitHub@2026" | & "C:\AnyDesk\AnyDesk.exe" --set-password
           $idFile = "C:\ProgramData\AnyDesk\system.conf"
           $ID = ""
@@ -88,22 +81,19 @@ jobs:
             Start-Sleep -Seconds 5
           }
           
-          # 3. Start Bore Tunnel
+          # 2. Start Bore Tunnel
           New-Item -Path "C:\GamingVM" -ItemType Directory -Force | Out-Null
           $outFile = "C:\GamingVM\bore_out.txt"
           $errFile = "C:\GamingVM\bore_err.txt"
           
-          function Start-Bore {
-            "" | Set-Content "C:\GamingVM\bore_out.txt"
-            "" | Set-Content "C:\GamingVM\bore_err.txt"
-            Start-Process -FilePath "C:\bore.exe" `
-              -ArgumentList "local 3389 --to bore.pub" `
-              -RedirectStandardOutput "C:\GamingVM\bore_out.txt" `
-              -RedirectStandardError  "C:\GamingVM\bore_err.txt" `
-              -WindowStyle Hidden -PassThru
-          }
+          "" | Set-Content "C:\GamingVM\bore_out.txt"
+          "" | Set-Content "C:\GamingVM\bore_err.txt"
+          Start-Process -FilePath "C:\bore.exe" `
+            -ArgumentList "local 3389 --to bore.pub" `
+            -RedirectStandardOutput "C:\GamingVM\bore_out.txt" `
+            -RedirectStandardError  "C:\GamingVM\bore_err.txt" `
+            -WindowStyle Hidden -PassThru | Out-Null
           
-          $boreProcess = Start-Bore
           $rdpPort = ""
           for ($i = 0; $i -lt 20; $i++) {
             Start-Sleep -Seconds 3
@@ -123,25 +113,35 @@ jobs:
                      Select-Object -First 1 -ExpandProperty IPAddressToString
           } catch { $rdpIP = "bore.pub" }
           
-          # 4. Print clean connection details immediately
-          Write-Log "=========================================="
-          Write-Log "  RUN NUMBER : $env:RUN_NUMBER"
-          Write-Log "  ANYDESK ID : $ID"
-          Write-Log "  PASSWORD   : GitHub@2026"
-          Write-Log "  ── RDP CONNECTION ───────────────────"
-          Write-Log "  TYPE THIS  : $rdpIP`:$rdpPort"
-          Write-Log "  USERNAME   : runneradmin"
-          Write-Log "  PASSWORD   : GitHub@2026"
-          Write-Log "=========================================="
-          
-          # 5. Keep alive silently for ~5.9 hours so you can stay connected
+          # 3. Print the output. This step will now END here, allowing logs to display instantly.
+          Write-Host "=========================================="
+          Write-Host "  RUN NUMBER : $env:RUN_NUMBER"
+          Write-Host "  ANYDESK ID : $ID"
+          Write-Host "  PASSWORD   : GitHub@2026"
+          Write-Host "  ── RDP CONNECTION ───────────────────"
+          Write-Host "  TYPE THIS  : $rdpIP`:$rdpPort"
+          Write-Host "  USERNAME   : runneradmin"
+          Write-Host "  PASSWORD   : GitHub@2026"
+          Write-Host "=========================================="
+
+      # ── STEP 2: Keep Alive (Runs silently for 6 hours) ──────
+      - name: 2. Keep Alive
+        shell: pwsh
+        run: |
           $cutoff  = [DateTime]::Now.AddHours(5).AddMinutes(55)
           
           while ([DateTime]::Now -lt $cutoff) {
             Start-Sleep -Seconds 60
             
             # Restart bore silently in the background if it crashes
-            if ($boreProcess.HasExited) {
-              $boreProcess = Start-Bore
+            $boreProcess = Get-Process -Name bore -ErrorAction SilentlyContinue
+            if (-not $boreProcess) {
+              "" | Set-Content "C:\GamingVM\bore_out.txt"
+              "" | Set-Content "C:\GamingVM\bore_err.txt"
+              Start-Process -FilePath "C:\bore.exe" `
+                -ArgumentList "local 3389 --to bore.pub" `
+                -RedirectStandardOutput "C:\GamingVM\bore_out.txt" `
+                -RedirectStandardError  "C:\GamingVM\bore_err.txt" `
+                -WindowStyle Hidden -PassThru | Out-Null
             }
           }
